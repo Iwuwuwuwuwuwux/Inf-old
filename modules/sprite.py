@@ -10,7 +10,7 @@ from PIL import Image, ImageTk, ImageOps
     2 : PIL image object
 - "sequences": dict of lists with keys being the sequence's name and containing a sequence data :
     -> THE FIRST VALUE HAS TO BE A BOOL, if True, the animation is a loop and repeats until it is manually stopped
-    if a value is a tuple, it switches the model of the sprite (Image object, 1sr elt) and set its position (tuple pos, 2nd elt)
+    if a value is a tuple, it switches the image of the sprite (str image name, 1st elt) and set its position (tuple pos, 2nd elt)
     if a value is an int, it represents a delay in milliseconds
 """
 
@@ -207,9 +207,12 @@ class Sprite:
         
         self.parent_canvas.unbind("<Button-1>", self)
 
-    def set_hover_callback(self, new_callback_hovered, new_callback_released) -> None:
+    def set_hover_callback(self, new_callback_hovered, new_callback_released, need_event_coordinates = False) -> None:
         """
         Defines/changes the callback of the sprite when it's hovered with the mouse.
+        If need_event_coordinates is set to True, the callbacks will be called with 2 ints passed as parameters, being the
+        coordinates of the mouse at the given moment (quit slow so don't try to use that for high speed applications, coordinates
+        are relative to the canvas on which the sprite was created).
 
         new_callback_hovered: function, called when the mouse is over the sprite
         new_callback_released: function, called when the mouse isn't over the sprite anymore
@@ -223,10 +226,12 @@ class Sprite:
             self.is_hovered = not self.is_hovered
 
             if self.is_shown: # if the sprite is shown
-                if self.is_hovered:
-                    self.hover_callback[0]()
+                if need_event_coordinates:
+                    if self.is_hovered: self.hover_callback[0](event.x, event.y)
+                    else: self.hover_callback[1](event.x, event.y)
                 else:
-                    self.hover_callback[1]()
+                    if self.is_hovered: self.hover_callback[0]()
+                    else: self.hover_callback[1]()
 
         self.parent_canvas.bind("<Motion>", f, self)
 

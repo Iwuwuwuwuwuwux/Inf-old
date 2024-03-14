@@ -7,7 +7,7 @@ from time import sleep
 
 from modules import entity, level, sprite as entity, level, sprite
 
-from levels.translations import Niveau1 as texts
+from levels.translations import TNiveau1 as texts
 
 class CLevel (level.Level):
     def __init__(self, game_instance: object):
@@ -27,17 +27,22 @@ class CLevel (level.Level):
         
         self.val = sprite.Sprite(
             self.frame,
-            {"images": {"main": Image.open("levels/images/samples/clash.png")}, "sequences": {}},
+            {
+                "images": {
+                    "main": Image.open("levels/images/samples/clash.png"),
+                    "hidden": Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+                },
+                "sequences": {
+                    "loop": [True, ("main", (0, 0)), 1000, ("hidden", (0, 0)), 1000]
+                }
+            },
             "main",
             (0, 0),
             (500, 500)
         )
+
         print("aaw")
-        while True:
-            sleep(2)
-            self.val.hide()
-            sleep(2)
-            self.val.show()
+        self.val.start_sequence("loop")
 """
 model = {
     "images": {
