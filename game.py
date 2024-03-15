@@ -86,6 +86,8 @@ class Game:
     def __init__(self) -> None:
         """
         Has to call self.initialize()
+
+        Overridable function.
         """     
         self.initialize("Untitled Game")
 
@@ -124,30 +126,42 @@ class Game:
             return canvas
         
         if not threading.get_ident() == self.tkinter_render_thread.ident: # if this func is not executed inside of the tkinter thread
-            self.assign_menu_object_queued(name, f)
-            self.wait_menu_object_creation(name)
+            self.assign_menu_widget_queued(name, f)
+            while not name in self.menu_objects: sleep(0.01)
         else:
+            if self.debug: print("----- Internal priority request: canvas creation (menu)")
             self.menu_objects[name] = f()
 
         return self.menu_objects[name]
 
-    def delete_menu_widget_queued(self, name: str) -> None:
-        """Deletes a widget from the menu_objects dict."""
+    def delete_menu_widget_queued(self, name: str) -> bool:
+        """
+        Deletes a widget from the menu_objects dict.
+        
+        returns: if the object has been or was already deleted
+        """
 
         if name in self.menu_objects:
             widget = self.menu_objects[name]
             del self.menu_objects[name]
 
             if widget.winfo_exists() == 1: # if the widget hasn't been destroyed yet
-                if threading.get_ident() == self.tkinter_render_thread.ident: # if this func is executed inside of the tkinter thread
-                    widget.destroy()
-                else:
-                    self.queue_function_postprocess(widget.destroy)
+                self.queue_function_postprocess(widget.destroy)
+                print("blblblblblblb")
 
-    def assign_menu_object_queued(self, name: str, function: object) -> None:
+            return True
+
+        else:
+            return False
+
+    def assign_menu_widget_queued(self, name: str, function: object) -> None:
         """
         Executed in the tkinter main thread. Assigns self.menu_objects[name] to what's returned by the given function.
-        Makes sure the given function is executed at the very start of the frame's computation
+        Makes sure the given function is executed at the very start of the frame's computation.
+
+        inputs:
+        name: str, name of the object that will be stored is the self.menu_objects dict
+        function: func, doesn't take any parameter and returns a TKinter/LevelCanvas object.
         """
 
         def f(): # ghost func
@@ -155,7 +169,7 @@ class Game:
 
         self.queue_function(f)
 
-    def assign_menu_object_queued_postprocess(self, name: str, function: object) -> None:
+    def assign_menu_widget_queued_postprocess(self, name: str, function: object) -> None:
         """
         Executed in the tkinter main thread. Assigns self.menu_objects[name] to what's returned by the given function.
         Makes sure the given function is executed at the very end of the frame's computation.
@@ -165,16 +179,6 @@ class Game:
             self.menu_objects[name] = function()
 
         self.queue_function_postprocess(f)
-
-    def wait_menu_object_creation(self, name: str) -> None:
-        """
-        Forces the program to wait until an entry with the given name is created in the menu_objects dict.
-        DO NOT CALL INSIDE OF A BIND RELATED CALLBACK OF ANY TKINTER OBJECT (infinite loop)
-        
-        name: str, name of the entry to wait for
-        """
-
-        while not name in self.menu_objects: sleep(0.01)
 
 
     def draw_menu(self) -> None:
@@ -187,6 +191,8 @@ class Game:
     def exit_menu(self) -> None:
         """
         Overridable function.
+
+        Executed when changing level.
         """
 
         pass
@@ -203,8 +209,7 @@ class Game:
         command: str, the bind's tkinter command
         callback: function, the function to be executed
 
-        returns:
-        bool: whether the binds was created or not
+        returns: if the bind has been created
         """
 
         if command in self.binds: return False
@@ -220,12 +225,12 @@ class Game:
 
         command: str, the bind's tkinter command
 
-        returns:
-        bool: whether the binds was deleted or not
+        returns: if a bind has been deleted
         """
         
         if not command in self.binds: return False
 
+        del self.binds[command]
         self.frame.unbind(command)
 
         return True
@@ -273,7 +278,7 @@ class Game:
         self.temp_stop = False
         
         self.frames_counter = 0
-        while self.is_running:
+        while self.is_running and bool(self.frame.winfo_exists()):
             self.frames_counter += 1
             if self.debug: has_executed = False
             
@@ -355,36 +360,46 @@ class Game:
         self.frame.destroy()
 
 
-    def change_level(self, new_level_filename: str):
+    def change_level(self, new_level_filename: str) -> bool:
         """
         Changes the current level.
-        If a level is ongoing, destroys it, otherwise hides the main menu.
+        If a level is ongoing, destroys it, otherwise destroys the main menu.
 
         new_level_filename: str, name of the new level's file
+
+        returns: if the level was created
         """
-        if not new_level_filename in self.levels: return
+        if not new_level_filename in self.levels:
+            if self.debug: print("Level \"{}\" not found.".format(new_level_filename))
+            return False
 
         if self.is_ingame: self.exit_level()
         else: self.exit_menu()
 
         self.is_ingame = True
 
+        if self.debug: print("Changing level to {}....".format(new_level_filename))
+
         self.current_level = self.levels[new_level_filename]
         self.current_level.create()
 
-    def exit_level(self):
+        if self.debug: print("Level created succesfully.")
+        return True
+
+    def exit_level(self)-> bool:
         """
         Exits the current level, if one.
         
-        returns:
-        bool: whether a level was exited or not
+        returns: if a level was exited
         """
-        if self.current_level is None: return
+        if self.current_level is None: return False
 
         self.current_level.destroy()
         self.current_level = None
 
         self.is_ingame = False
+
+        return True
 
 
     

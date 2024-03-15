@@ -9,54 +9,30 @@ import modules.level as level
 import modules.sprite as sprite
 import modules.entity as entity
 
+from infold.data.menu_models import menu_models, generate_menu_models
 import infold.data.translations as translations
 import infold.settings as settings
+
 
 class Infold(game.Game):
     """Class containing all of the project's related code."""
 
     def __init__(self) -> None:
+        global menu_models
+
         self.settings = settings.current_settings # ref, used to allow access to the settings by the levels
-
-        self.initialize("Inf'Old: A new start", debug = True, frame_size = (1920, 1080)) # also initializes the levels
-
-        self.levels_roadmap = ["Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4", "Niveau 5", "EasterEgg"]
 
         self.texts = translations.translations
         self.text_font = ("Cascadia Code", 15)
-        
-        self.menu_models = { # preloads all the models
-            "background": {"images": {"main": Image.open("levels/images/menu/background.png")}, "sequences": {}},
-            "banner": {"images": {"main": Image.open("levels/images/menu/banner.png")}, "sequences": {}},
-            "cross": {"images": {"main": Image.open("levels/images/menu/croix.png")}, "sequences": {}},
-            "gear": {"images": {"main": Image.open("levels/images/menu/engrenage.png")}, "sequences": {}},
-            "play": {
-                "images": {
-                    "idle": Image.open("levels/images/menu/jeu 1.png"),
-                    "hover": Image.open("levels/images/menu/jeu 2.png")
-                },
-                "sequences": {}
-            },
-            "levels": {
-                "images": {
-                    "idle": Image.open("levels/images/menu/niv 1.png"),
-                    "hover": Image.open("levels/images/menu/niv 2.png")
-                },
-                "sequences": {}
-            },
-            "pseudonyme": {
-                "images": {
-                    "idle": Image.open("levels/images/menu/pseudonyme_idle.png"),
-                    "hover": Image.open("levels/images/menu/pseudonyme_hover.png")
-                },
-                "sequences": {}
-            },
 
-            "flags": {
-                "EN": {"images": {"main": Image.open("levels/images/menu/flags/EN.png")}, "sequences": {}},
-                "FR": {"images": {"main": Image.open("levels/images/menu/flags/FR.png")}, "sequences": {}},
-            }
-        }
+        if self.settings["language"] in self.texts:
+            generate_menu_models(self.texts[self.settings["language"]])
+        else:
+            generate_menu_models(self.texts["EN"])
+        self.menu_models = menu_models
+
+        self.initialize("Inf'Old: A new start", debug = True) # also initializes the levels
+        self.levels_roadmap = ["Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4", "Niveau 5", "EasterEgg"]
 
         self.draw_menu()
 
@@ -74,16 +50,31 @@ class Infold(game.Game):
         if lang in self.texts:
             return self.texts[lang][name]
         else:
+            if self.debug: print("Language {} not found, returning default EN text.".format(lang))
             return self.texts["EN"][name]
         
-    def select_language(self, new_lang: str) -> None:
-        """Changes the language of the game and saves it into the settings."""
+    def select_language(self, new_lang: str) -> bool:
+        """
+        Changes the language of the game and saves it into the settings.
+        
+        Returns: if the language has been changed
+        """
+
+        if new_lang == self.settings["language"]: return False
 
         self.settings["language"] = new_lang # also changes the settings.current_settings dict
         settings.save_settings()
 
-        self.delete_menu_widget_queued("settings_canvas")
+        if new_lang in self.texts:
+            generate_menu_models(self.texts[new_lang])
+        else:
+            generate_menu_models(self.texts["EN"])
+        if "main_canvas" in self.menu_objects:
+            self.exit_menu()
+            self.draw_menu()
         self.queue_function(self.menu_func_button_open_settings)
+
+        return True
 
     
     def draw_menu(self) -> None: 
@@ -106,7 +97,6 @@ class Infold(game.Game):
             (0, 50),
             (500, 150)
         )
-
 
         self.menu_objects["quit_button"] = sprite.Sprite(
             main_canvas,
@@ -138,6 +128,7 @@ class Infold(game.Game):
             lambda: self.menu_objects["play_button"].set_current_image("hover"),
             lambda: self.menu_objects["play_button"].set_current_image("idle")
         )
+        self.menu_objects["play_button"].set_click_callback(lambda: self.change_level(self.settings["progression"]))
 
         self.menu_objects["levels_button"] = sprite.Sprite(
             main_canvas,
@@ -161,8 +152,9 @@ class Infold(game.Game):
         """Functions used by the settings button in the main menu."""
 
         if "settings_canvas" in self.menu_objects: return # if the settings are already open
-        if "menu_canvas" in self.menu_objects:
-            
+        if "main_canvas" in self.menu_objects:
+            self.queue_function(self.menu_objects["quit_button"].hide)
+            self.queue_function(self.menu_objects["settings_button"].hide)
 
         settings_canvas = self.create_menu_canvas("settings_canvas", 30, 30, 440, 440)
 
@@ -182,7 +174,7 @@ class Infold(game.Game):
             ids += [settings_canvas.create_rectangle(0, 0, 450, 35, outline = "white")]
 
             return ids
-        self.assign_menu_object_queued_postprocess("settings_rectangle_quit_button", f) # used to make sure the background isn't hiding it
+        self.assign_menu_widget_queued_postprocess("settings_rectangle_quit_button", f) # used to make sure the background isn't hiding it
 
         self.menu_objects["settings_quit_button"] = sprite.Sprite(
             settings_canvas,
@@ -191,7 +183,7 @@ class Infold(game.Game):
             (415, 10),
             (20, 20)
         )
-        self.menu_objects["settings_quit_button"].set_click_callback(lambda: self.delete_menu_widget_queued("settings_canvas"))
+        self.menu_objects["settings_quit_button"].set_click_callback(self.menu_func_button_close_settings)
 
 
         self.menu_objects["settings_username_button"] = sprite.Sprite(
@@ -206,6 +198,9 @@ class Infold(game.Game):
             lambda: self.menu_objects["settings_username_button"].set_current_image("hover"),
             lambda: self.menu_objects["settings_username_button"].set_current_image("idle")
         )
+
+        # reset progression button
+        # all access button
 
 
         self.menu_objects["settings_FR_flag"] = sprite.Sprite(
@@ -226,6 +221,15 @@ class Infold(game.Game):
         )
         self.menu_objects["settings_EN_flag"].set_click_callback(lambda: self.select_language("EN"))
 
+    def menu_func_button_close_settings(self) -> None:
+        """Close the settings menu."""
+
+        if "main_canvas" in self.menu_objects:
+            self.menu_objects["quit_button"].show()
+            self.menu_objects["settings_button"].show()
+
+        self.delete_menu_widget_queued("settings_canvas")
+
 
     def menu_func_button_open_username_menu(self) -> None:
         """Opens the username menu."""
@@ -233,13 +237,9 @@ class Infold(game.Game):
         if "username_canvas" in self.menu_objects: return # if the menu is already open
 
         username_canvas = self.create_menu_canvas("settings_canvas", 150, 200, 200, 100)
-        
 
-    def change_level(self, new_level_filename: str) -> bool:
-        super().change_level(new_level_filename) # calls the parent's changelevel func
-
-        self.delete_menu_widget_queued("settings_canvas") # destroys the settings menu if it is open
-        self.delete_menu_widget_queued("username_canvas") # destroys the username menu if it is open
+        def f(): # ghost function, creating tkinter elements inside of the canvas
+            self.menu_objects["username_textinput"] = tkinter.Entry(username_canvas, )
 
 
     def exit_menu(self) -> None:
@@ -249,4 +249,4 @@ class Infold(game.Game):
 
     # ----------  BIND FUNCTIONS ----------
         
-test = Infold() 
+game_instance = Infold()

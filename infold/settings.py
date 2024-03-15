@@ -5,7 +5,7 @@ current_settings = {} # holds the data of the settings file at any moment during
 settings_base = { # set containing the default settings when the file hasn't been created/is corrupted
     "language": "FR",
     "username": "Jean-Louis Jacques du Père, 3e du nom",
-    "progression": "Niveau 1",
+    "progression": "LNiveau1",
     "has_selected_username": False
 }
 

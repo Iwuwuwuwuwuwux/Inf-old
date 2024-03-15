@@ -1,4 +1,5 @@
 import tkinter as tk
+import threading
 from time import sleep
 
 
@@ -143,10 +144,10 @@ class Level:
         """
         global funcs_exec_queue, funcs_exec_queue_availible
 
-        self.game_instance.is_ingame = True
-
-        tk_thrd_id = self.game_instance.tkinter_thread_id        
         game_inst = self.game_instance # for simplification purposes
+
+        game_inst.is_ingame = True
+        tk_thrd_id = self.game_instance.tkinter_thread_id        
         w, h = game_inst.frame_size
 
         def f(): # ghost func
@@ -155,10 +156,14 @@ class Level:
 
             self.frame.tkinter_thread_id = tk_thrd_id
 
-        while not funcs_exec_queue_availible[tk_thrd_id]: sleep(0.001)
-        funcs_exec_queue[tk_thrd_id] += [f] # pushes the function into the exec queue
+        if not threading.get_ident() == game_inst.tkinter_render_thread.ident: # if this func is not executed inside of the tkinter thread
+            while not funcs_exec_queue_availible[tk_thrd_id]: sleep(0.001)
+            funcs_exec_queue[tk_thrd_id] += [f] # pushes the function into the exec queue
 
-        while self.frame is None: sleep(0.01) # made to ensure that next calls will be able to use the canvas
+            while self.frame is None: sleep(0.01) # made to ensure that next calls will be able to use the canvas
+        else:
+            if self.game_instance.debug: print("----- Internal priority request: canvas creation (level)")
+            f()
 
     def create(self) -> None:
         """
@@ -192,11 +197,11 @@ class Level:
 class LevelCanvas (tk.Canvas):
     """Adds functionnalities to the tkinter canvas class (makes possible the handling of several funcs for the same bind)."""
 
-    def __init__(self, parent_frame, w, h):
-        self.tkinter_thread_id = parent_frame.tkinter_thread_id
+    def __init__(self, parent_widget: object, w: int, h: int):
+        self.tkinter_thread_id = parent_widget.tkinter_thread_id
         self.binds = {}
 
-        super().__init__(parent_frame, width = w, height = h, border = False) # calls constructor of parent class
+        super().__init__(parent_widget, width = w, height = h, border = False) # calls constructor of parent class
         self.configure(border = False)
 
         self.destroyed = False
@@ -229,7 +234,7 @@ class LevelCanvas (tk.Canvas):
 
         self.binds[command][ref] = callback # adds the callback in the list of function assigned to the given event
 
-    def unbind(self, command, ref) -> None:
+    def unbind(self, command: str, ref: object) -> None:
         """Overrides default TKinter Canvas' unbind function."""
 
         if ref in self.binds[command]:
