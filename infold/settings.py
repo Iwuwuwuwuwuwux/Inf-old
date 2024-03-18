@@ -6,6 +6,7 @@ settings_base = { # set containing the default settings when the file hasn't bee
     "language": "FR",
     "username": "Jean-Louis Jacques du Père, 3e du nom",
     "progression": "LNiveau1",
+    "all_access": False,
     "has_selected_username": False
 }
 

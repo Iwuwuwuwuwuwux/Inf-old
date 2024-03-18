@@ -97,13 +97,11 @@ class Game:
     def queue_function(self, function: object) -> None:
         """Executes a function inside of the tkinter thread (internal queue)."""
 
-        while not self.internal_tk_exec_queue_availible: sleep(0.001)
         self.internal_tk_exec_queue += [function]
 
     def queue_function_postprocess(self, function: object) -> None:
         """Executes a function inside of the tkinter thread (internal postprocess queue)."""
 
-        while not self.internal_tk_exec_queue_postprocess_availible: sleep(0.001)
         self.internal_tk_exec_queue_postprocess += [function]
 
 
@@ -119,18 +117,18 @@ class Game:
         Returns: the LevelCanvas object.
         """
 
-        def f(): # ghost func
+        def create_level_canvas(): # ghost func
             canvas = level.LevelCanvas(self.frame, width, height)
             canvas.place(x = x, y = y, anchor = "nw")
 
             return canvas
         
         if not threading.get_ident() == self.tkinter_render_thread.ident: # if this func is not executed inside of the tkinter thread
-            self.assign_menu_widget_queued(name, f)
+            self.assign_menu_widget_queued(name, create_level_canvas)
             while not name in self.menu_objects: sleep(0.01)
         else:
             if self.debug: print("----- Internal priority request: canvas creation (menu)")
-            self.menu_objects[name] = f()
+            self.menu_objects[name] = create_level_canvas()
 
         return self.menu_objects[name]
 
@@ -147,7 +145,6 @@ class Game:
 
             if widget.winfo_exists() == 1: # if the widget hasn't been destroyed yet
                 self.queue_function_postprocess(widget.destroy)
-                print("blblblblblblb")
 
             return True
 
@@ -164,10 +161,10 @@ class Game:
         function: func, doesn't take any parameter and returns a TKinter/LevelCanvas object.
         """
 
-        def f(): # ghost func
+        def assign_menu(): # ghost func
             self.menu_objects[name] = function()
 
-        self.queue_function(f)
+        self.queue_function(assign_menu)
 
     def assign_menu_widget_queued_postprocess(self, name: str, function: object) -> None:
         """
@@ -175,10 +172,10 @@ class Game:
         Makes sure the given function is executed at the very end of the frame's computation.
         """
 
-        def f(): # ghost func
+        def assign_menu(): # ghost func
             self.menu_objects[name] = function()
 
-        self.queue_function_postprocess(f)
+        self.queue_function_postprocess(assign_menu)
 
 
     def draw_menu(self) -> None:
@@ -236,18 +233,6 @@ class Game:
         return True
 
 
-    def exec_queue(self, queue: list) -> None:
-        """Internal function that execute each function of the given queue."""
-
-        try:
-            for function in queue:
-                if self.debug: print(function)
-
-                function()
-
-        except:
-            print("////////// Error during last frame ({}), queue exited prematurely.".format(self.frames_counter))
-
     def update_frame(self) -> None:
         """
         Function that refreshes the content of the tkinter frame.
@@ -259,12 +244,8 @@ class Game:
 
         tkinter_thread_id = self.tkinter_thread_id # used to avoid constant repetitions
 
-        self.internal_tk_exec_queue_availible = True
         level.funcs_exec_queue[tkinter_thread_id] = []
-        level.funcs_exec_queue_availible[tkinter_thread_id] = True
         sprite.funcs_exec_queue[self.tkinter_thread_id] = []
-        sprite.funcs_exec_queue_availible[self.tkinter_thread_id] = True
-        self.internal_tk_exec_queue_postprocess_availible = True
 
 
         self.frame = tk.Tk()
@@ -277,81 +258,59 @@ class Game:
 
         self.temp_stop = False
         
+        def exec_queue(queues_original: list, debug_names: list):
+            """Executes each function of the given queue."""
+            queues = []
+            for element in queues_original:
+                queues += [element.copy()]
+
+            tot_count = 0
+            for queue_index in range(len(queues)):
+                queue = queues[queue_index]
+
+                func_index = -1 # ensures that even if the queue is empty the var will still be initialized
+                #try:
+                for func_index in range(len(queue)):
+                    if self.debug: print(queue[func_index])
+
+                    queue[func_index]()
+
+                #except:
+                #    print("////////// Error during last frame ({}), queue exited prematurely.".format(self.frames_counter))
+
+                if func_index != -1:
+                    # ensures that unexecuted functions will be pushed back in the queue may triggers errors but it at least
+                    # ensures that the program won't instantly crash at the first encountered error tho it isn't a reason to
+                    # intentionnaly make some
+                    for _ in range(func_index + 1):
+                        queues_original[queue_index].pop(0)
+
+                    tot_count += func_index + 1
+
+                    if self.debug: print("End of {} queue ({} requests executed).".format(debug_names[queue_index], func_index + 1))
+
+            if self.debug and tot_count != 0:
+                print("Finished executing frame {}, {} requests executed.\n".format(self.frames_counter, tot_count))
+
+
+        if self.debug: print("TKinter thread {} initialized, starting requests execution.\n".format(self.tkinter_render_thread.ident))
+
         self.frames_counter = 0
         while self.is_running and bool(self.frame.winfo_exists()):
             self.frames_counter += 1
             if self.debug: has_executed = False
-            
-            # Repetitions in this section are necessary to improve the repartition of requests.
-            # DO NOT TRY TO "OPTIMIZE" THIS SECTION, IT WAS INTENTIONNALY MADE REDUNDANT TO FIX ISSUES AND SAVE FRAME TIME
 
-            # ----- internal queue execution -----
-            self.internal_tk_exec_queue_availible = False
+            # ---------- queues executions ----------
 
-            requests = self.internal_tk_exec_queue
-            self.internal_tk_exec_queue = []
+            requests = [
+                self.internal_tk_exec_queue,
+                level.funcs_exec_queue[self.tkinter_thread_id],
+                sprite.funcs_exec_queue[self.tkinter_thread_id],
+                self.internal_tk_exec_queue_postprocess
+            ]
 
-            self.internal_tk_exec_queue_availible = True
+            exec_queue(requests, ["internal execution", "sprites", "levels", "internal postprocess"])
 
-            if self.debug:
-                if len(requests) != 0:
-                    print("Executing internal requests ({} calls)...".format(len(requests)))
-                    has_executed = True
-
-            self.exec_queue(requests)
-
-
-            # ----- level queue execution -----
-            level.funcs_exec_queue_availible[tkinter_thread_id] = False
-
-            requests = level.funcs_exec_queue[tkinter_thread_id]
-            level.funcs_exec_queue[tkinter_thread_id] = []
-
-            level.funcs_exec_queue_availible[tkinter_thread_id] = True
-
-            if self.debug:
-                if len(requests) != 0:
-                    print("Executing level's requests ({} calls)...".format(len(requests)))
-                    has_executed = True
-
-            self.exec_queue(requests)
-
-
-            # ----- sprite queue execution -----
-            sprite.funcs_exec_queue_availible[tkinter_thread_id] = False
-
-            requests = sprite.funcs_exec_queue[tkinter_thread_id]
-            sprite.funcs_exec_queue[tkinter_thread_id] = []
-
-            sprite.funcs_exec_queue_availible[tkinter_thread_id] = True
-
-            if self.debug:
-                if len(requests) != 0:
-                    print("Executing sprite's requests ({} calls)...".format(len(requests)))
-                    has_executed = True
-
-            self.exec_queue(requests)
-
-
-            # ----- internal postprocess queue execution ------
-            self.internal_tk_exec_queue_postprocess_availible = False
-
-            requests = self.internal_tk_exec_queue_postprocess
-            self.internal_tk_exec_queue_postprocess = []
-
-            self.internal_tk_exec_queue_postprocess_availible = True
-
-            if self.debug:
-                if len(requests) != 0:
-                    print("Executing internal postprocess requests ({} calls)...".format(len(requests)))
-                    has_executed = True
-
-            self.exec_queue(requests)
-
-
-            # -----------------------------------------------------
-
-            if self.debug and has_executed: print("End of requests for frame {}. Updating GUI.\n".format(self.frames_counter))
             self.frame.update()
             sleep(0.05)
 

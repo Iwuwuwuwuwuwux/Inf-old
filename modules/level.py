@@ -150,20 +150,19 @@ class Level:
         tk_thrd_id = self.game_instance.tkinter_thread_id        
         w, h = game_inst.frame_size
 
-        def f(): # ghost func
+        def create_level_canvas(): # ghost func
             self.frame = LevelCanvas(game_inst.frame, w = w, h = h)
             self.frame.place(x = 0, y = 0, anchor = "nw")
 
             self.frame.tkinter_thread_id = tk_thrd_id
 
         if not threading.get_ident() == game_inst.tkinter_render_thread.ident: # if this func is not executed inside of the tkinter thread
-            while not funcs_exec_queue_availible[tk_thrd_id]: sleep(0.001)
-            funcs_exec_queue[tk_thrd_id] += [f] # pushes the function into the exec queue
+            funcs_exec_queue[tk_thrd_id] += [create_level_canvas] # pushes the function into the exec queue
 
             while self.frame is None: sleep(0.01) # made to ensure that next calls will be able to use the canvas
         else:
             if self.game_instance.debug: print("----- Internal priority request: canvas creation (level)")
-            f()
+            create_level_canvas()
 
     def create(self) -> None:
         """
@@ -189,7 +188,6 @@ class Level:
         self.init_data()
 
         self.frame.destroy()
-
         self.game_instance.is_ingame = False
 
 
@@ -229,7 +227,6 @@ class LevelCanvas (tk.Canvas):
         if not command in self.binds: # if there is no assigned bind to the specified tkinter event
             self.binds[command] = {}
 
-            while not funcs_exec_queue_availible[self.tkinter_thread_id]: sleep(0.001)
             funcs_exec_queue[self.tkinter_thread_id] += [lambda: self.bind_tk_func(command)] # calls the base class bind function
 
         self.binds[command][ref] = callback # adds the callback in the list of function assigned to the given event
@@ -257,5 +254,4 @@ class LevelCanvas (tk.Canvas):
 
         self.destroyed = True
 
-        while not funcs_exec_queue_availible[self.tkinter_thread_id]: sleep(0.001)
         funcs_exec_queue[self.tkinter_thread_id] += [self.destroy_tk_func]

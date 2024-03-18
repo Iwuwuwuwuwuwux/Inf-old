@@ -131,7 +131,6 @@ class Sprite:
         if not self.is_shown: return
 
         # puts in the funcs queue a function that changes the sprite model
-        while not funcs_exec_queue_availible[self.main_thread_id]: sleep(0.001)
         funcs_exec_queue[self.main_thread_id] += [self.change_image]
 
 
@@ -192,11 +191,11 @@ class Sprite:
 
         self.click_callback = new_callback
 
-        def f(event): # ghost function
+        def button_callback(event): # ghost function
             if self.is_shown and self.is_in_boundaries((event.x, event.y)): # if the sprite is shown and the mouse is in boundaries
                 self.click_callback()
 
-        self.parent_canvas.bind("<Button-1>", f, self)
+        self.parent_canvas.bind("<Button-1>", button_callback, self)
 
     def remove_click_callback(self):
         """
@@ -220,7 +219,7 @@ class Sprite:
 
         self.hover_callback = (new_callback_hovered, new_callback_released)
 
-        def f(event): # ghost function
+        def motion_callback(event): # ghost function
             if self.is_in_boundaries((event.x, event.y)) == self.is_hovered: return
             
             self.is_hovered = not self.is_hovered
@@ -233,7 +232,7 @@ class Sprite:
                     if self.is_hovered: self.hover_callback[0]()
                     else: self.hover_callback[1]()
 
-        self.parent_canvas.bind("<Motion>", f, self)
+        self.parent_canvas.bind("<Motion>", motion_callback, self)
 
     def remove_hover_callback(self):
         """
@@ -266,7 +265,6 @@ class Sprite:
         id_ref = self.canvas_id
         self.canvas_id = None
 
-        while not funcs_exec_queue_availible[self.main_thread_id]: sleep(0.001)
         funcs_exec_queue[self.main_thread_id] += [lambda: self.parent_canvas.delete(id_ref)]
 
 
